@@ -182,7 +182,8 @@ class GameRoom {
 
         // Find next valid player
         let attempts = 0;
-        while (!this.physics.players.has(this.players[nextIndex]) && attempts < this.players.length) {
+        // Check if player exists in physics engine (is still alive)
+        while (!this.physics.players.has(this.players[nextIndex].id) && attempts < this.players.length) {
             nextIndex = (nextIndex + 1) % this.players.length;
             attempts++;
         }
