@@ -29,8 +29,15 @@ io.on('connection', (socket) => {
 
     socket.on('startGame', () => {
         const room = roomManager.getRoomBySocket(socket.id);
-        if (room && room.players[0].id === socket.id) { // Only host can start
+        if (room && room.players.length > 0 && room.players[0].id === socket.id) { // Only host can start
             room.startGame();
+        }
+    });
+
+    socket.on('restartGame', () => {
+        const room = roomManager.getRoomBySocket(socket.id);
+        if (room && room.players.length > 0 && room.players[0].id === socket.id) {
+            room.restartGame();
         }
     });
 

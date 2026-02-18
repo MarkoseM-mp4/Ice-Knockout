@@ -19,6 +19,7 @@ const usernameInput = document.getElementById('username-input');
 // Client State
 let mySocketId = null;
 let currentRoomId = null;
+let currentHostId = null;
 let isMyTurn = false;
 
 // Resize handling
@@ -76,6 +77,7 @@ socket.on('roomJoined', (roomId) => {
 
 socket.on('lobbyUpdate', (data) => {
     // data: { roomId, players: [{name, id}], hostId }
+    currentHostId = data.hostId;
     updatePlayerList(data.players, data.hostId);
 });
 
@@ -84,6 +86,7 @@ socket.on('gameStart', (config) => {
         game.arenaRadius = config.arenaRadius;
     }
     lobbyUI.style.display = 'none';
+    document.getElementById('winner-screen').style.display = 'none'; // Hide winner screen if it was open
     gameUI.style.display = 'block';
     resizeCanvas(); // Ensure canvas is sized right
 });
@@ -220,6 +223,8 @@ socket.on('gameOver', (data) => {
     const winnerScreen = document.getElementById('winner-screen');
     const winnerName = document.getElementById('winner-name');
     const winnerMessage = document.getElementById('winner-message');
+    const restartBtn = document.getElementById('restart-game-btn');
+    const waitingMsg = document.getElementById('restart-waiting-msg');
 
     gameUI.style.display = 'none';
 
@@ -231,11 +236,25 @@ socket.on('gameOver', (data) => {
         winnerMessage.textContent = 'Better luck next time!';
     }
 
+    // Show appropriate buttons
+    if (currentHostId === mySocketId) {
+        restartBtn.style.display = 'inline-block';
+        waitingMsg.style.display = 'none';
+    } else {
+        restartBtn.style.display = 'none';
+        waitingMsg.style.display = 'block';
+    }
+
     winnerScreen.style.display = 'block';
 });
 
-const playAgainBtn = document.getElementById('play-again-btn');
-playAgainBtn.addEventListener('click', () => {
+const restartGameBtn = document.getElementById('restart-game-btn');
+restartGameBtn.addEventListener('click', () => {
+    socket.emit('restartGame');
+});
+
+const leaveRoomBtn = document.getElementById('leave-room-btn');
+leaveRoomBtn.addEventListener('click', () => {
     window.location.reload();
 });
 

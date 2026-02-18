@@ -87,6 +87,29 @@ class GameRoom {
         this.isActive = false;
     }
 
+    restartGame() {
+        if (this.interval) clearInterval(this.interval);
+        this.isActive = false;
+
+        // Reset Physics
+        for (const [id, body] of this.physics.players) {
+            this.physics.removePlayer(id);
+        }
+        this.physics.players.clear(); // just to be sure map is clear
+
+        // Re-add players to physics
+        this.players.forEach(p => {
+            this.physics.addPlayer(p.id);
+        });
+
+        // Reset Game State
+        this.currentTurnIndex = 0;
+        this.isMoving = false;
+
+        // Start again
+        this.startGame();
+    }
+
     handleShoot(socketId, angle, power) {
         // TODO: Validate turn
         this.physics.applyShootForce(socketId, angle, power);
