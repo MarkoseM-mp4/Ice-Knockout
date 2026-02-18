@@ -218,7 +218,13 @@ socket.on('collision', (data) => {
 });
 
 socket.on('gameOver', (data) => {
-    soundManager.playWin();
+    console.log('Game Over event received:', data);
+    try {
+        soundManager.playWin();
+    } catch (e) {
+        console.error('Error playing sound:', e);
+    }
+
     // data: { winnerId, winnerName }
     const winnerScreen = document.getElementById('winner-screen');
     const winnerName = document.getElementById('winner-name');
