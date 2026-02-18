@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ice Knockout</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+</head>
+
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-layer">
+            <div id="lobby-ui">
+                <h1>Ice Knockout</h1>
+                <div id="login-screen">
+                    <input type="text" id="username-input" placeholder="Enter Username">
+                    <br>
+                    <button id="create-room-btn">Create Room</button>
+                    <br><br>
+                    <input type="text" id="room-input" placeholder="Room Code">
+                    <button id="join-room-btn">Join Room</button>
+                    <div id="room-error" style="color: red; margin-top: 10px;"></div>
+                </div>
+
+                <div id="waiting-screen" style="display: none;">
+                    <h2>Room Code: <span id="display-room-code" style="color: #4CAF50; letter-spacing: 2px;"></span>
+                        <span id="copy-code-btn" title="Copy room code"
+                            style="cursor:pointer; margin-left:8px; font-size:18px; vertical-align:middle; opacity:0.7;"
+                            onclick="copyRoomCode()">📋</span>
+                        <span id="copy-feedback"
+                            style="font-size:12px; color:#4CAF50; margin-left:5px; display:none;">Copied!</span>
+                    </h2>
+                    <script>
+                        function copyRoomCode() {
+                            const code = document.getElementById('display-room-code').textContent;
+                            navigator.clipboard.writeText(code).then(() => {
+                                const fb = document.getElementById('copy-feedback');
+                                fb.style.display = 'inline';
+                                setTimeout(() => fb.style.display = 'none', 1500);
+                            });
+                        }
+                    </script>
+                    <h3>Players (<span id="player-count">0</span>/4)</h3>
+                    <ul id="player-list" style="list-style: none; padding: 0;"></ul>
+                    <button id="start-game-btn"
+                        style="display: none; background-color: #2196F3; font-size: 18px; padding: 15px 30px;">START
+                        GAME</button>
+                    <div id="waiting-message">Waiting for host to start...</div>
+                </div>
+            </div>
+            <div id="game-ui" style="display: none;">
+                <div id="turn-indicator">Waiting for players...</div>
+            </div>
+            <div id="winner-screen" style="display: none;">
+                <h1>🏆 WINNER! 🏆</h1>
+                <h2 id="winner-name"></h2>
+                <p id="winner-message">Last ball standing!</p>
+                <button id="play-again-btn">Play Again</button>
+            </div>
+        </div>
+    </div>
+    <script src="js/renderer.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/sound.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>
