@@ -202,14 +202,79 @@ document.addEventListener('click', () => {
     soundManager.resume();
 }, { once: true });
 
-socket.on('playerEliminated', (eliminatedId) => {
+socket.on('playerEliminated', (data) => {
+    const { eliminatedId, killerId, killerName } = data;
     console.log('Eliminated:', eliminatedId);
     soundManager.playElimination();
+
     if (eliminatedId === mySocketId) {
         turnIndicator.textContent = "ELIMINATED";
         turnIndicator.style.color = "red";
     }
+
+    // Popup Logic
+    const victim = game.players.find(p => p.id === eliminatedId);
+    const victimName = victim ? victim.name : 'Unknown Player';
+
+    showEliminationPopup(victimName, killerName, eliminatedId, killerId);
 });
+
+function showEliminationPopup(victimName, killerName, victimId, killerId) {
+    const popup = document.createElement('div');
+
+    let message = `${victimName} eliminated!`;
+    if (killerName && killerId !== victimId) {
+        message = `${victimName} eliminated by ${killerName}!`;
+    } else if (killerId === victimId) {
+        message = `${victimName} knocked themselves out!`;
+    }
+
+    popup.textContent = message;
+
+    // Styles
+    popup.style.position = 'absolute';
+    popup.style.right = '20px';
+    // Stack popups? simpler to just place at top or stack physically
+    // Let's create a container for popups if possible, or just absolute.
+    // To stack, we could append to a container.
+    // Let's create a container on the fly if needed.
+
+    let container = document.getElementById('popup-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'popup-container';
+        container.style.position = 'absolute';
+        container.style.right = '20px';
+        container.style.top = '100px'; // Below other UI
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.gap = '10px';
+        container.style.pointerEvents = 'none';
+        container.style.zIndex = '1000';
+        document.body.appendChild(container);
+    }
+
+    popup.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    popup.style.color = '#fff';
+    popup.style.padding = '10px 15px';
+    popup.style.borderRadius = '5px';
+    popup.style.borderLeft = '4px solid #f44336';
+    popup.style.fontFamily = 'Arial, sans-serif';
+    popup.style.transition = 'opacity 0.5s';
+    popup.style.opacity = '0';
+
+    container.appendChild(popup);
+
+    // Animate
+    requestAnimationFrame(() => {
+        popup.style.opacity = '1';
+    });
+
+    setTimeout(() => {
+        popup.style.opacity = '0';
+        setTimeout(() => popup.remove(), 500);
+    }, 4000);
+}
 
 socket.on('collision', (data) => {
     game.createSparks(data.x, data.y);

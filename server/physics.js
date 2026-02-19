@@ -12,16 +12,19 @@ class PhysicsEngine {
         this.onCollision = null; // Callback for sparks
 
         Matter.Events.on(this.engine, 'collisionStart', (event) => {
-            if (this.onCollision) {
-                const pairs = event.pairs;
-                for (let i = 0; i < pairs.length; i++) {
-                    const pair = pairs[i];
-                    // Check if both are players (have labels starting with socketID usually, but we set label=id)
-                    // Actually, simple check: are they in players map?
-                    // Or just send collision point for any collision involving a player.
+            const pairs = event.pairs;
+            for (let i = 0; i < pairs.length; i++) {
+                const pair = pairs[i];
+                const bodyA = pair.bodyA;
+                const bodyB = pair.bodyB;
 
-                    // Let's just send the collision point.
-                    // Contacts[0].vertex is the point.
+                // Track last touch
+                if (this.players.has(bodyA.label) && this.players.has(bodyB.label)) {
+                    bodyA.lastTouchedBy = bodyB.label;
+                    bodyB.lastTouchedBy = bodyA.label;
+                }
+
+                if (this.onCollision) {
                     const collision = {
                         x: pair.collision.supports[0]?.x || pair.bodyA.position.x,
                         y: pair.collision.supports[0]?.y || pair.bodyA.position.y
@@ -47,6 +50,8 @@ class PhysicsEngine {
             frictionStatic: 0,
             label: id
         });
+
+        body.lastTouchedBy = null; // Track who last touched this player
 
         Matter.Composite.add(this.world, body);
         this.players.set(id, body);
@@ -95,8 +100,9 @@ class PhysicsEngine {
         // Check bounds
         for (const [id, body] of this.players) {
             const dist = Math.sqrt(body.position.x ** 2 + body.position.y ** 2);
-            if (dist > this.arenaRadius + 15) { // 15 is radius
-                if (this.onEliminate) this.onEliminate(id);
+            // Eliminate if center crosses the boundary (more intuitive)
+            if (dist > this.arenaRadius) {
+                if (this.onEliminate) this.onEliminate(id, body.lastTouchedBy);
                 this.removePlayer(id);
             }
         }

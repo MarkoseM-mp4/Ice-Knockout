@@ -6,7 +6,7 @@ class GameRoom {
         this.io = io;
         this.players = []; // Array of objects: { id, name }
         this.physics = new PhysicsEngine();
-        this.physics.onEliminate = (id) => this.handleElimination(id);
+        this.physics.onEliminate = (id, killerId) => this.handleElimination(id, killerId);
         this.physics.onCollision = (collision) => this.handleCollision(collision);
 
         this.isActive = false;
@@ -19,6 +19,7 @@ class GameRoom {
         // Turn System
         this.currentTurnIndex = 0;
         this.isMoving = false;
+        this.remainingPlayers = [];
     }
 
     addPlayer(socketId, username) {
@@ -44,6 +45,18 @@ class GameRoom {
 
     removePlayer(socketId) {
         this.players = this.players.filter(p => p.id !== socketId);
+
+        // Remove from remainingPlayers if present
+        const remIndex = this.remainingPlayers.findIndex(p => p.id === socketId);
+        if (remIndex !== -1) {
+            this.remainingPlayers.splice(remIndex, 1);
+            if (remIndex < this.currentTurnIndex) {
+                this.currentTurnIndex--;
+            }
+            // Ensure index is valid
+            this.currentTurnIndex = this.currentTurnIndex % (this.remainingPlayers.length || 1);
+        }
+
         this.physics.removePlayer(socketId);
         if (this.players.length === 0) {
             this.stopGame();
@@ -78,6 +91,11 @@ class GameRoom {
         if (this.isActive) return;
         this.isActive = true;
         this.calculateSpawnPositions();
+
+        // Initialize remaining players
+        this.remainingPlayers = [...this.players];
+        this.currentTurnIndex = 0;
+
         this.interval = setInterval(() => this.loop(), 1000 / 60);
         this.io.to(this.roomId).emit('gameStart', { arenaRadius: this.physics.arenaRadius });
     }
@@ -119,16 +137,44 @@ class GameRoom {
         this.io.to(this.roomId).emit('collision', collision);
     }
 
-    handleElimination(socketId) {
-        this.io.to(this.roomId).emit('playerEliminated', socketId);
+    handleElimination(socketId, killerId) {
+        // Find killer name
+        let killerName = null;
+        if (killerId) {
+            const killer = this.players.find(p => p.id === killerId);
+            if (killer) killerName = killer.name;
+        }
+
+        // Update remainingPlayers
+        const eliminatedIndex = this.remainingPlayers.findIndex(p => p.id === socketId);
+        if (eliminatedIndex !== -1) {
+            this.remainingPlayers.splice(eliminatedIndex, 1);
+            // Adjust turn index if needed
+            if (eliminatedIndex < this.currentTurnIndex) {
+                this.currentTurnIndex--;
+            }
+            // If eliminatedIndex === currentTurnIndex, we don't change index, 
+            // effectively pointing to the next player.
+            // But if we are at the end of the array, we might need wrapping, handled in turn logic or access.
+        }
+
+        this.io.to(this.roomId).emit('playerEliminated', {
+            eliminatedId: socketId,
+            killerId: killerId,
+            killerName: killerName
+        });
     }
 
     loop() {
         this.physics.update();
 
         // Check win condition AFTER physics update (removals are done)
-        if (this.physics.players.size === 1 && this.players.length > 1) {
-            const winnerId = this.physics.players.keys().next().value;
+        // Use remainingPlayers instead of physics size for consistency?
+        // Physics removes bodies, so physics.players.size is accurate for "alive bodies".
+        // remainingPlayers should match physics.players.size roughly.
+
+        if (this.remainingPlayers.length === 1 && this.players.length > 1) {
+            const winnerId = this.remainingPlayers[0].id;
             const winnerPlayer = this.players.find(p => p.id === winnerId);
             const winnerName = winnerPlayer ? winnerPlayer.name : 'Unknown';
 
@@ -138,7 +184,7 @@ class GameRoom {
             });
             this.stopGame();
             return;
-        } else if (this.physics.players.size === 0 && this.players.length > 0) {
+        } else if (this.remainingPlayers.length === 0 && this.players.length > 0) {
             this.io.to(this.roomId).emit('gameOver', {
                 winnerId: null,
                 winnerName: 'Nobody'
@@ -169,35 +215,95 @@ class GameRoom {
         });
         this.io.to(this.roomId).emit('gameState', {
             players: enrichedState,
-            activePlayerId: this.players[this.currentTurnIndex]?.id,
+            activePlayerId: this.remainingPlayers[this.currentTurnIndex]?.id,
             isMoving: this.isMoving
         });
     }
 
     handleTurnEnd() {
-        // Rotate turn
-        // Filter out eliminated players if we implement that fully later (physics removes them, so check existance)
-        // Simple rotation for now
-        let nextIndex = (this.currentTurnIndex + 1) % this.players.length;
+        if (this.remainingPlayers.length === 0) return;
 
-        // Find next valid player
-        let attempts = 0;
-        // Check if player exists in physics engine (is still alive)
-        while (!this.physics.players.has(this.players[nextIndex].id) && attempts < this.players.length) {
-            nextIndex = (nextIndex + 1) % this.players.length;
-            attempts++;
+        // Determine if we need to increment index.
+        // If the active player (who just played) is still in remainingPlayers, we increment to next.
+        // If they were eliminated, currentTurnIndex already points to the next guy (due to splice shift).
+        // Wait, currentTurnIndex points to the index. 
+        // We need to know who *was* the active player. 
+        // But activePlayerId is derived from currentTurnIndex in the loop.
+
+        // Let's assume the turn index logic update in handleElimination handles the shift.
+        // If current player (index i) dies:
+        //   splice(i, 1). Array shifts left. New element at i is the next player.
+        //   So we should NOT increment i.
+        // If current player (index i) survives:
+        //   We want next player (i+1).
+        //   So we increment i.
+
+        // But how do we know if they died?
+        // We can check if the player *currently* at currentTurnIndex was the one who just played?
+        // No, currentTurnIndex points to valid player now.
+
+        // Better strategy:
+        // We need to know who *took* the turn. Use a stored `turnPlayerId`.
+        // But we don't have that easily unless we stored it.
+        // However, we know `isMoving` was true. The player who shot caused `isMoving`.
+
+        // Actually, simpler:
+        // If the player who just moved is still in remainingPlayers, increment.
+        // But `this.activePlayerId` is recalculated every loop based on index.
+
+        // Let's assume we always increment, UNLESS the previous player died?
+        // Let's rely on `handleShoot`.
+        // When shooting, we can store `this.lastShooterId`.
+        // Then in `handleTurnEnd`:
+        // if (this.remainingPlayers.find(p => p.id === this.lastShooterId)) {
+        //      this.currentTurnIndex++;
+        // }
+        // this.currentTurnIndex %= this.remainingPlayers.length;
+
+        // Wait, what if the shooter survived but someone BEFORE them died?
+        // handleElimination decrements index. So index matches shooter.
+        // Then shooter survives -> increment. Correct.
+
+        // What if shooter survived, someone AFTER them died?
+        // Index matches shooter. Increment. Correct.
+
+        // What if shooter died?
+        // handleElimination does NOT decrement (since index == eliminatedIndex).
+        // currentTurnIndex still points to the slot (now occupied by next player).
+        // If we increment, we skip the player who slid into the slot?
+        // Yes. So if shooter died, we should NOT increment.
+
+        // So we need to know if the CURRENT index currently points to the player who just finished their turn.
+        // But we don't know who "just finished" without storing it.
+
+        // BUT, we only shoot if `activePlayer` shoots.
+        // So let's store `currentTurnPlayerId` in `handleTurnEnd`? No, too late.
+
+        // Let's simply check if the player at `currentTurnIndex` has `velocity > 0`? No, they stopped.
+
+        // I will add `lastActivePlayerId` to class.
+        // Or better: In `handleShoot`, `this.shootingPlayerId = socketId`.
+
+        if (this.remainingPlayers.find(p => p.id === this.shootingPlayerId)) {
+            this.currentTurnIndex = (this.currentTurnIndex + 1) % this.remainingPlayers.length;
+        } else {
+            // Shooter died. calculated active index now points to next player automatically (due to splice).
+            // However, currentTurnIndex might be out of bounds if it was the last element.
+            this.currentTurnIndex = this.currentTurnIndex % this.remainingPlayers.length;
         }
 
-        this.currentTurnIndex = nextIndex;
-        // this.io.to(this.roomId).emit('turnChange', this.players[this.currentTurnIndex]);
-        // We send it in gameState every tick so explicit event not strictly needed but good for UI events
+        this.shootingPlayerId = null;
     }
 
     handleShoot(socketId, angle, power) {
         // Validate Turn
         if (this.isMoving) return; // Cannot shoot while moving
-        if (this.players[this.currentTurnIndex].id !== socketId) return; // Not your turn
 
+        const activeId = this.remainingPlayers[this.currentTurnIndex]?.id;
+
+        if (activeId !== socketId) return; // Not your turn
+
+        this.shootingPlayerId = socketId; // Track who shot
         this.physics.applyShootForce(socketId, angle, power);
         this.isMoving = true; // Mark as moving immediately so we waiting for stop
     }
