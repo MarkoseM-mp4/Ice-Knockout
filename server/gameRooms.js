@@ -1,11 +1,11 @@
 const PhysicsEngine = require('./physics');
 
 class GameRoom {
-    constructor(roomId, io) {
+    constructor(roomId, io, arenaType = "round") {
         this.roomId = roomId;
         this.io = io;
         this.players = []; // Array of objects: { id, name }
-        this.physics = new PhysicsEngine();
+        this.physics = new PhysicsEngine(arenaType);
         this.physics.onEliminate = (id, killerId) => this.handleElimination(id, killerId);
         this.physics.onCollision = (collision) => this.handleCollision(collision);
 
@@ -15,6 +15,8 @@ class GameRoom {
         // Game Settings
         this.MAX_PLAYERS = 4;
         this.physics.arenaRadius = 300; // Need to sync this with client
+        this.arenaType = arenaType;
+
 
         // Turn System
         this.currentTurnIndex = 0;
@@ -74,8 +76,20 @@ class GameRoom {
             const body = this.physics.players.get(p.id);
             if (body) {
                 const angle = angleStep * index;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
+                let x, y;
+
+                if (this.arenaType === 'square') {
+                    // For square, spawn near corners or edges depending on count
+                    // Simple circle distribution works fine inside a square too, 
+                    // but let's clamp or adjust if needed.
+                    // Actually, circle distribution inside the square radius is safe.
+                    x = Math.cos(angle) * (radius - 20);
+                    y = Math.sin(angle) * (radius - 20);
+                } else {
+                    x = Math.cos(angle) * radius;
+                    y = Math.sin(angle) * radius;
+                }
+
                 // Matter.Body.setPosition(body, { x, y }); 
                 // Need to use Matter directly, or expose method in PhysicsEngine
                 // Let's modify PhysicsEngine to support repositioning or just set it here if we access body props.
@@ -97,7 +111,10 @@ class GameRoom {
         this.currentTurnIndex = 0;
 
         this.interval = setInterval(() => this.loop(), 1000 / 60);
-        this.io.to(this.roomId).emit('gameStart', { arenaRadius: this.physics.arenaRadius });
+        this.io.to(this.roomId).emit('gameStart', {
+            arenaRadius: this.physics.arenaRadius,
+            arenaType: this.arenaType
+        });
     }
 
     stopGame() {
@@ -315,9 +332,9 @@ class RoomManager {
         this.rooms = new Map(); // roomId -> GameRoom
     }
 
-    createRoom() {
+    createRoom(arenaType = "round") {
         const roomId = Math.random().toString(36).substring(7);
-        const room = new GameRoom(roomId, this.io);
+        const room = new GameRoom(roomId, this.io, arenaType);
         this.rooms.set(roomId, room);
         return roomId;
     }

@@ -48,7 +48,8 @@ const roomError = document.getElementById('room-error');
 // UI Events
 createRoomBtn.addEventListener('click', () => {
     const username = usernameInput.value.trim() || "Guest";
-    socket.emit('createRoom', username);
+    const arenaType = document.querySelector('input[name="arena"]:checked').value;
+    socket.emit('createRoom', { username, arenaType });
 });
 
 joinRoomBtn.addEventListener('click', () => {
@@ -84,6 +85,9 @@ socket.on('lobbyUpdate', (data) => {
 socket.on('gameStart', (config) => {
     if (config.arenaRadius) {
         game.arenaRadius = config.arenaRadius;
+    }
+    if (config.arenaType) {
+        renderer.arenaType = config.arenaType; // Tell renderer the shape
     }
     lobbyUI.style.display = 'none';
     document.getElementById('winner-screen').style.display = 'none'; // Hide winner screen if it was open

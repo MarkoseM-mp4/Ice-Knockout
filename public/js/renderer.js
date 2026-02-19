@@ -51,7 +51,14 @@ class Renderer {
 
     drawArena(radius) {
         this.ctx.beginPath();
-        this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        if (this.arenaType === 'square') {
+            // Draw rectangle
+            // radius is half-width
+            this.ctx.rect(-radius, -radius, radius * 2, radius * 2);
+        } else {
+            // Draw circle (default)
+            this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        }
         this.ctx.fillStyle = '#e0f7fa'; // Ice color
         this.ctx.fill();
         this.ctx.lineWidth = 5;

@@ -23,13 +23,23 @@ app.get('/', (req, res) => {
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    socket.on('createRoom', (username) => {
-        const roomId = roomManager.createRoom();
+    socket.on('createRoom', (data) => {
+        let username = "Guest";
+        let arenaType = "round";
+
+        if (typeof data === 'string') {
+            username = data;
+        } else if (data && typeof data === 'object') {
+            username = data.username || "Guest";
+            arenaType = data.arenaType || "round";
+        }
+
+        const roomId = roomManager.createRoom(arenaType);
         const room = roomManager.getRoom(roomId);
         socket.join(roomId); // Join room FIRST so broadcast reaches this socket
         room.addPlayer(socket.id, username); // Add creator
         socket.emit('roomCreated', roomId);
-        console.log(`Room ${roomId} created by ${socket.id} (${username})`);
+        console.log(`Room ${roomId} created by ${socket.id} (${username}) [${arenaType}]`);
     });
 
     socket.on('startGame', () => {
